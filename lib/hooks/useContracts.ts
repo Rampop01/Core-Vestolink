@@ -11,6 +11,7 @@ export function useVestolinkFactory() {
     abi: FACTORY_ABI,
     functionName: 'getAllVestolinks',
     chainId,
+    onError: (err) => console.error('getAllVestolinks error:', err),
   })
 
   // Example: get user vestolinks
@@ -20,6 +21,7 @@ export function useVestolinkFactory() {
     functionName: 'getUserVestolinks',
     args: address ? [address] : undefined,
     chainId,
+    onError: (err) => console.error('getUserVestolinks error:', err),
   })
 
   // Example: deploy new vestolink with token
@@ -46,6 +48,7 @@ export function useVestolink(vestolinkAddress: `0x${string}`) {
     abi: VESTOLINK_ABI,
     functionName: 'token',
     chainId,
+    onError: (err) => console.error('token (vestolink) error:', err),
   })
 
   // Get beneficiary count
@@ -54,6 +57,7 @@ export function useVestolink(vestolinkAddress: `0x${string}`) {
     abi: VESTOLINK_ABI,
     functionName: 'getBeneficiaryCount',
     chainId,
+    onError: (err) => console.error('getBeneficiaryCount error:', err),
   })
 
   // Get vesting schedule for current user
@@ -63,6 +67,7 @@ export function useVestolink(vestolinkAddress: `0x${string}`) {
     functionName: 'getVestingSchedule',
     args: address ? [address] : undefined,
     chainId,
+    onError: (err) => console.error('getVestingSchedule error:', err),
   })
 
   // Get vesting template
@@ -81,6 +86,7 @@ export function useVestolink(vestolinkAddress: `0x${string}`) {
     functionName: 'getClaimableAmount',
     args: address ? [address] : undefined,
     chainId,
+    onError: (err) => console.error('getClaimableAmount error:', err),
   })
 
   // Get contract status
@@ -130,6 +136,7 @@ export function useToken(tokenAddress: `0x${string}`) {
     abi: TOKEN_ABI,
     functionName: 'name' as any,
     chainId,
+    onError: (err) => console.error('token name error:', err),
   })
 
   // Get token symbol
@@ -138,6 +145,7 @@ export function useToken(tokenAddress: `0x${string}`) {
     abi: TOKEN_ABI,
     functionName: 'symbol' as any,
     chainId,
+    onError: (err) => console.error('token symbol error:', err),
   })
 
   // Get user balance
@@ -147,6 +155,7 @@ export function useToken(tokenAddress: `0x${string}`) {
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
     chainId,
+    onError: (err) => console.error('token balanceOf error:', err),
   })
 
   // Get allowance for vestolink contracts
@@ -156,6 +165,7 @@ export function useToken(tokenAddress: `0x${string}`) {
     functionName: 'allowance',
     args: address ? [address, CONTRACTS.VESTOLINK] : undefined,
     chainId,
+    onError: (err) => console.error('token allowance error:', err),
   })
 
   // Write functions

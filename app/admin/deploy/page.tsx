@@ -20,7 +20,7 @@ import {
   Copy,
 } from "lucide-react"
 import Link from "next/link"
-import { useAccount, useConnect, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useAccount, useConnect, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi'
 import { parseTokenAmount, getExplorerUrl, shortenAddress, VESTOLINK_ABI, FACTORY_ABI, CONTRACTS } from "@/lib/web3"
 
 const steps = [
@@ -47,9 +47,16 @@ export default function DeployProject() {
   const { connect, connectors } = useConnect()
   
   // Contract hooks
-  const { writeContract: deployWithTokenWrite, data: deployTokenTxHash, isPending: isDeployTokenPending } = useWriteContract()
-  const { writeContract: deployWithExistingTokenWrite, data: deployExistingTxHash, isPending: isDeployExistingPending } = useWriteContract()
-  const { writeContract: writeVestingSchedule, data: vestingTxHash, isPending: isVestingPending } = useWriteContract()
+  const { writeContract: deployWithTokenWrite, data: deployTokenTxHash, isPending: isDeployTokenPending, error: deployTokenError } = useWriteContract()
+  const { writeContract: deployWithExistingTokenWrite, data: deployExistingTxHash, isPending: isDeployExistingPending, error: deployExistingError } = useWriteContract()
+  const { writeContract: writeVestingSchedule, data: vestingTxHash, isPending: isVestingPending, error: vestingError } = useWriteContract()
+  
+  // Check if factory contract exists
+  const { data: factoryOwner, error: factoryError } = useReadContract({
+    address: CONTRACTS.FACTORY,
+    abi: FACTORY_ABI,
+    functionName: 'owner',
+  })
   
   // Wait for transaction receipts
   const { data: deployTokenReceipt, isSuccess: isDeployTokenSuccess } = useWaitForTransactionReceipt({
@@ -61,7 +68,7 @@ export default function DeployProject() {
   
   // State
   const [currentStep, setCurrentStep] = useState(1)
-  const [selectedNetwork, setSelectedNetwork] = useState<string>("sepolia")
+  const [selectedNetwork, setSelectedNetwork] = useState<string>("core-testnet2")
   const [tokenType, setTokenType] = useState<"new" | "existing" | null>(null)
   const [isDeploying, setIsDeploying] = useState(false)
   const [deploymentStatus, setDeploymentStatus] = useState<"idle" | "deploying" | "success" | "error">("idle")
@@ -96,9 +103,27 @@ export default function DeployProject() {
     beneficiaries: [] as Array<{ address: string; amount: string }>,
   })
 
+  // Monitor transaction hash
+  useEffect(() => {
+    if (deployTokenTxHash && deploymentStatus === "deploying") {
+      console.log('Deploy token transaction hash:', deployTokenTxHash)
+      console.log('Waiting for transaction confirmation...')
+      console.log('Explorer link:', `https://scan.test.btcs.network/tx/${deployTokenTxHash}`)
+    }
+  }, [deployTokenTxHash, deploymentStatus])
+
+  useEffect(() => {
+    if (deployExistingTxHash && deploymentStatus === "deploying") {
+      console.log('Deploy existing token transaction hash:', deployExistingTxHash)
+      console.log('Waiting for transaction confirmation...')
+      console.log('Explorer link:', `https://scan.test.btcs.network/tx/${deployExistingTxHash}`)
+    }
+  }, [deployExistingTxHash, deploymentStatus])
+
   // Handle successful deployment when transaction receipts are available
   useEffect(() => {
     if (isDeployTokenSuccess && deployTokenReceipt && deploymentStatus === "deploying") {
+      console.log('Deploy token transaction confirmed!')
       processSuccessfulDeployment(deployTokenReceipt, deployTokenTxHash!, "new")
     }
   }, [isDeployTokenSuccess, deployTokenReceipt, deploymentStatus, deployTokenTxHash])
@@ -108,6 +133,25 @@ export default function DeployProject() {
       processSuccessfulDeployment(deployExistingReceipt, deployExistingTxHash!, "existing")
     }
   }, [isDeployExistingSuccess, deployExistingReceipt, deploymentStatus, deployExistingTxHash])
+
+  // Handle deployment errors
+  useEffect(() => {
+    if (deployTokenError && deploymentStatus === "deploying") {
+      console.error("Deploy token error:", deployTokenError)
+      alert(`Token deployment failed: ${deployTokenError.message}`)
+      setDeploymentStatus("error")
+      setIsDeploying(false)
+    }
+  }, [deployTokenError, deploymentStatus])
+
+  useEffect(() => {
+    if (deployExistingError && deploymentStatus === "deploying") {
+      console.error("Deploy existing token error:", deployExistingError)
+      alert(`Existing token deployment failed: ${deployExistingError.message}`)
+      setDeploymentStatus("error")
+      setIsDeploying(false)
+    }
+  }, [deployExistingError, deploymentStatus])
 
   const processSuccessfulDeployment = async (receipt: any, txHash: string, type: "new" | "existing") => {
     try {
@@ -279,6 +323,14 @@ export default function DeployProject() {
       // Step 1: Validate parameters
       setDeploymentSteps((prev) => prev.map((step, i) => (i === 0 ? { ...step, status: "active" } : step)))
 
+      // Check if factory contract exists
+      console.log('Factory contract owner:', factoryOwner)
+      console.log('Factory contract error:', factoryError)
+      
+      if (factoryError) {
+        throw new Error(`Factory contract not found at ${CONTRACTS.FACTORY}. Please verify the contract address.`)
+      }
+
       // Validate form data
       if (tokenType === "new") {
         if (!formData.tokenName || !formData.tokenSymbol || !formData.totalSupply) {
@@ -299,31 +351,43 @@ export default function DeployProject() {
       // Step 2: Deploy contracts
       if (tokenType === "new") {
         console.log('Deploying with new token:', formData)
+        console.log('Factory contract address:', CONTRACTS.FACTORY)
+        console.log('Parsed total supply:', parseTokenAmount(formData.totalSupply))
         
-        await deployWithTokenWrite({
-          address: CONTRACTS.FACTORY,
-          abi: FACTORY_ABI,
-          functionName: 'deployVestolinkWithToken',
-          args: [
-            formData.tokenName,
-            formData.tokenSymbol,
-            parseTokenAmount(formData.totalSupply)
-          ],
-        })
-        
-        // The useEffect hook will handle the rest when the transaction completes
+        try {
+          await deployWithTokenWrite({
+            address: CONTRACTS.FACTORY,
+            abi: FACTORY_ABI,
+            functionName: 'deployVestolinkWithToken',
+            args: [
+              formData.tokenName,
+              formData.tokenSymbol,
+              parseTokenAmount(formData.totalSupply)
+            ],
+          })
+          console.log('deployVestolinkWithToken transaction submitted')
+          console.log('Transaction hash will be available soon...')
+        } catch (deployError: any) {
+          console.error('Deploy with token error:', deployError)
+          throw new Error(`Token deployment failed: ${deployError.message || deployError}`)
+        }
         
       } else {
         console.log('Deploying with existing token:', formData.existingTokenAddress)
+        console.log('Factory contract address:', CONTRACTS.FACTORY)
         
-        await deployWithExistingTokenWrite({
-          address: CONTRACTS.FACTORY,
-          abi: FACTORY_ABI,
-          functionName: 'deployVestolinkWithExistingToken',
-          args: [formData.existingTokenAddress as `0x${string}`],
-        })
-        
-        // The useEffect hook will handle the rest when the transaction completes
+        try {
+          await deployWithExistingTokenWrite({
+            address: CONTRACTS.FACTORY,
+            abi: FACTORY_ABI,
+            functionName: 'deployVestolinkWithExistingToken',
+            args: [formData.existingTokenAddress as `0x${string}`],
+          })
+          console.log('deployVestolinkWithExistingToken transaction submitted')
+        } catch (deployError: any) {
+          console.error('Deploy with existing token error:', deployError)
+          throw new Error(`Existing token deployment failed: ${deployError.message || deployError}`)
+        }
       }
 
     } catch (error: any) {

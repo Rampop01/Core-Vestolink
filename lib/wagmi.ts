@@ -1,3 +1,6 @@
+// This file is no longer used - configuration moved to contexts/web3-context.tsx
+// Keeping for reference only
+
 'use client'
 
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'

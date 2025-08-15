@@ -6,6 +6,7 @@ import { WagmiProvider, http } from 'wagmi'
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import type { Chain } from 'wagmi/chains'
+import { useState, useEffect } from 'react'
 
 // Core Blockchain Testnet2 configuration
 export const core: Chain = {
@@ -107,12 +108,22 @@ interface Web3ProviderProps {
 }
 
 export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider theme={vestolinkTheme}>
-          {children}
-        </RainbowKitProvider>
+        {mounted ? (
+          <RainbowKitProvider theme={vestolinkTheme}>
+            {children}
+          </RainbowKitProvider>
+        ) : (
+          <div>{children}</div>
+        )}
       </QueryClientProvider>
     </WagmiProvider>
   )
