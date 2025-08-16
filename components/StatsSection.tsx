@@ -14,6 +14,8 @@ export default function StatsSection() {
   const isLoading = allVestolinks.isLoading
   const isError = allVestolinks.isError
 
+  console.log('Vestolink addresses:', vestolinkAddresses)
+
   // Use useReadContracts to fetch all beneficiary counts at once
   const beneficiaryCountContracts = vestolinkAddresses.map((address) => ({
     address: address as `0x${string}`,
@@ -67,10 +69,9 @@ export default function StatsSection() {
         {/* Debug info - remove in production */}
         {process.env.NODE_ENV === 'development' && (
           <div className="text-xs text-gray-500 mb-4">
-            Debug: {vestolinkAddresses.length} contracts, {totalBeneficiaries} total beneficiaries
-            {beneficiaryCountsData && (
+            {/* {beneficiaryCountsData && (
               <div>Contract results: {JSON.stringify(beneficiaryCountsData.map(r => r.status === 'success' ? Number(r.result) : 'error'))}</div>
-            )}
+            )} */}
           </div>
         )}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">

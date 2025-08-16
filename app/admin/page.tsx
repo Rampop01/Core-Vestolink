@@ -25,7 +25,7 @@ export default function AdminDashboard() {
   // Load user's projects
   useEffect(() => {
     const loadProjects = async () => {
-      if (!account) {
+      if (!account || !userVestolinks.data) {
         setLoading(false)
         return
       }
@@ -35,7 +35,6 @@ export default function AdminDashboard() {
         const userVestolinkAddresses = userVestolinks.data || []
 
         // Just store the addresses - ProjectCard components will handle the individual data loading
-        // Note: userVestolinkAddresses from the smart contract are typically returned in deployment order (newest first)
         setProjectAddresses([...userVestolinkAddresses])
         
         setStats({
@@ -54,50 +53,13 @@ export default function AdminDashboard() {
     loadProjects()
   }, [userVestolinks.data, account])
 
-  // Add window focus event listener to refresh data when returning from deployment
-  useEffect(() => {
-    const handleFocus = () => {
-      // Reload projects when window regains focus (e.g., returning from deployment page)
-      if (account) {
-        setLoading(true)
-        // Trigger a re-render by updating a timestamp
-        setTimeout(() => {
-          setLoading(false)
-          // Force reload the projects by calling the effect dependencies
-          window.dispatchEvent(new CustomEvent('reload-projects'))
-        }, 100)
-      }
-    }
-
-    const handleStorageChange = () => {
-      // Reload when localStorage changes (new deployment added)
-      if (account) {
-        setLoading(true)
-        setTimeout(() => {
-          setLoading(false)
-        }, 100)
-      }
-    }
-
-    window.addEventListener('focus', handleFocus)
-    window.addEventListener('storage', handleStorageChange)
-    
-    // Also listen for custom reload events
-    window.addEventListener('reload-projects', handleFocus)
-    
-    return () => {
-      window.removeEventListener('focus', handleFocus)
-      window.removeEventListener('storage', handleStorageChange)
-      window.removeEventListener('reload-projects', handleFocus)
-    }
-  }, [account])
-
   // Manual refresh function
   const refreshProjects = () => {
     setLoading(true)
+    // Trigger a re-fetch by invalidating the query
     setTimeout(() => {
       setLoading(false)
-    }, 100)
+    }, 1000)
   }
 
   if (!isConnected) {

@@ -153,7 +153,7 @@ export default function ProjectManagePage({ params }: { params: { address: strin
     }
 
     loadProjectData()
-  }, [account, isConnected, vestolinkAddress, vestingSchedule, beneficiaryCount, tokenAddress, tokenData])
+  }, [account, isConnected, vestolinkAddress, vestingSchedule?.data, beneficiaryCount?.data, tokenAddress?.data, tokenData?.name?.data, tokenData?.symbol?.data])
 
   const handleAddBeneficiaries = async () => {
     if (!account || !isConnected) {

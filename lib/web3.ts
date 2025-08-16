@@ -150,5 +150,5 @@ export const shortenAddress = (address: string): string => {
 }
 
 export const getExplorerUrl = (hash: string, type: "tx" | "address" = "tx"): string => {
-  return `https://scan.test.btcs.network/${type}/${hash}`
+  return `https://scan.test2.btcs.network/${type}/${hash}`
 }

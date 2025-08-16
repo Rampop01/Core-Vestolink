@@ -16,6 +16,12 @@ export function formatTokenAmount(amount: string | number, decimals: number = 18
   return (num / 1000000).toFixed(1) + 'M'
 }
 
+export function parseTokenAmount(amount: string, decimals: number = 18): bigint {
+  const num = parseFloat(amount)
+  if (isNaN(num)) return BigInt(0)
+  return BigInt(Math.floor(num * Math.pow(10, decimals)))
+}
+
 export function shortenAddress(address: string): string {
   if (!address) return ''
   return `${address.slice(0, 6)}...${address.slice(-4)}`

@@ -11,7 +11,6 @@ export function useVestolinkFactory() {
     abi: FACTORY_ABI,
     functionName: 'getAllVestolinks',
     chainId,
-    onError: (err) => console.error('getAllVestolinks error:', err),
   })
 
   // Example: get user vestolinks
@@ -21,7 +20,6 @@ export function useVestolinkFactory() {
     functionName: 'getUserVestolinks',
     args: address ? [address] : undefined,
     chainId,
-    onError: (err) => console.error('getUserVestolinks error:', err),
   })
 
   // Example: deploy new vestolink with token
@@ -48,7 +46,6 @@ export function useVestolink(vestolinkAddress: `0x${string}`) {
     abi: VESTOLINK_ABI,
     functionName: 'token',
     chainId,
-    onError: (err) => console.error('token (vestolink) error:', err),
   })
 
   // Get beneficiary count
@@ -57,7 +54,6 @@ export function useVestolink(vestolinkAddress: `0x${string}`) {
     abi: VESTOLINK_ABI,
     functionName: 'getBeneficiaryCount',
     chainId,
-    onError: (err) => console.error('getBeneficiaryCount error:', err),
   })
 
   // Get vesting schedule for current user
@@ -67,17 +63,33 @@ export function useVestolink(vestolinkAddress: `0x${string}`) {
     functionName: 'getVestingSchedule',
     args: address ? [address] : undefined,
     chainId,
-    onError: (err) => console.error('getVestingSchedule error:', err),
   })
 
-  // Get vesting template
-  // 🚧 COMMENTED OUT - UNCOMMENT WHEN YOU ADD getVestingTemplate TO YOUR SMART CONTRACT:
-  // const vestingTemplate = useReadContract({
-  //   address: vestolinkAddress,
-  //   abi: VESTOLINK_ABI,
-  //   functionName: 'getVestingTemplate',
-  //   chainId,
-  // })
+  // Get all vesting templates
+  const allVestingTemplates = useReadContract({
+    address: vestolinkAddress,
+    abi: VESTOLINK_ABI,
+    functionName: 'getAllVestingTemplates',
+    chainId,
+  })
+
+  // Get specific vesting template (will use first template by default)
+  const vestingTemplate = useReadContract({
+    address: vestolinkAddress,
+    abi: VESTOLINK_ABI,
+    functionName: 'getVestingTemplate',
+    args: [BigInt(0)], // Get first template (templateId 0)
+    chainId,
+  })
+
+  // Get first chunk of beneficiaries (0-49)
+  const beneficiariesChunk = useReadContract({
+    address: vestolinkAddress,
+    abi: VESTOLINK_ABI,
+    functionName: 'getBeneficiaries',
+    args: [BigInt(0), BigInt(49)], // Get first 50 beneficiaries
+    chainId,
+  })
 
   // Get claimable amount for current user
   const claimableAmount = useReadContract({
@@ -86,43 +98,57 @@ export function useVestolink(vestolinkAddress: `0x${string}`) {
     functionName: 'getClaimableAmount',
     args: address ? [address] : undefined,
     chainId,
-    onError: (err) => console.error('getClaimableAmount error:', err),
   })
 
-  // Get contract status
-  // 🚧 COMMENTED OUT - UNCOMMENT WHEN YOU ADD isActive TO YOUR SMART CONTRACT:
-  // const isActive = useReadContract({
-  //   address: vestolinkAddress,
-  //   abi: VESTOLINK_ABI,
-  //   functionName: 'isActive',
-  //   chainId,
-  // })
+  // Get contract pause status
+  const isPaused = useReadContract({
+    address: vestolinkAddress,
+    abi: VESTOLINK_ABI,
+    functionName: 'paused',
+    chainId,
+  })
+
+  // Get total allocated tokens
+  const totalAllocated = useReadContract({
+    address: vestolinkAddress,
+    abi: VESTOLINK_ABI,
+    functionName: 'totalAllocated',
+    chainId,
+  })
+
+  // Get contract balance
+  const contractBalance = useReadContract({
+    address: vestolinkAddress,
+    abi: VESTOLINK_ABI,
+    functionName: 'getContractBalance',
+    chainId,
+  })
 
   // Write functions
   const claimTokens = useWriteContract()
   const depositTokens = useWriteContract()
   const createVestingSchedule = useWriteContract()
-  
-  // 🚧 COMMENTED OUT - UNCOMMENT WHEN YOU ADD THESE FUNCTIONS TO YOUR SMART CONTRACT:
-  // const addBeneficiaries = useWriteContract()
-  // const pauseContract = useWriteContract()
-  // const unpauseContract = useWriteContract()
-  // const revokeBeneficiary = useWriteContract()
+  const pauseContract = useWriteContract()
+  const unpauseContract = useWriteContract()
+  const revokeVesting = useWriteContract()
 
   return {
     tokenAddress,
     beneficiaryCount,
     vestingSchedule,
-    // vestingTemplate,        // 🚧 COMMENTED OUT
+    allVestingTemplates,
+    vestingTemplate,
+    beneficiariesChunk,
     claimableAmount,
-    // isActive,              // 🚧 COMMENTED OUT
+    isPaused,
+    totalAllocated,
+    contractBalance,
     claimTokens,
     depositTokens,
     createVestingSchedule,
-    // addBeneficiaries,      // 🚧 COMMENTED OUT
-    // pauseContract,         // 🚧 COMMENTED OUT
-    // unpauseContract,       // 🚧 COMMENTED OUT
-    // revokeBeneficiary,     // 🚧 COMMENTED OUT
+    pauseContract,
+    unpauseContract,
+    revokeVesting,
   }
 }
 
@@ -136,7 +162,6 @@ export function useToken(tokenAddress: `0x${string}`) {
     abi: TOKEN_ABI,
     functionName: 'name' as any,
     chainId,
-    onError: (err) => console.error('token name error:', err),
   })
 
   // Get token symbol
@@ -145,7 +170,6 @@ export function useToken(tokenAddress: `0x${string}`) {
     abi: TOKEN_ABI,
     functionName: 'symbol' as any,
     chainId,
-    onError: (err) => console.error('token symbol error:', err),
   })
 
   // Get user balance
@@ -155,7 +179,6 @@ export function useToken(tokenAddress: `0x${string}`) {
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
     chainId,
-    onError: (err) => console.error('token balanceOf error:', err),
   })
 
   // Get allowance for vestolink contracts
@@ -165,7 +188,6 @@ export function useToken(tokenAddress: `0x${string}`) {
     functionName: 'allowance',
     args: address ? [address, CONTRACTS.VESTOLINK] : undefined,
     chainId,
-    onError: (err) => console.error('token allowance error:', err),
   })
 
   // Write functions

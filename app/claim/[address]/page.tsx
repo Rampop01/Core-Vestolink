@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Clock, CheckCircle, Coins, TrendingUp, Download, ExternalLink, Copy, Award, Wallet } from "lucide-react"
 import { useAccount, useConnect } from 'wagmi'
-import { useVestolink } from '@/lib/hooks/useContracts'
+import { useVestolink, useToken } from '@/lib/hooks/useContracts'
 import { formatTokenAmount, shortenAddress } from "@/lib/utils"
 import { getExplorerUrl, VESTOLINK_ABI } from '@/lib/web3'
 
@@ -38,7 +38,16 @@ export default function ClaimPage({ params }: { params: { address: string } }) {
   const vestolinkAddress = params.address as `0x${string}`
   
   // Use enhanced contract hooks for real data
-  const { vestingSchedule, claimableAmount: claimableAmountData, claimTokens } = useVestolink(vestolinkAddress)
+  const { 
+    vestingSchedule, 
+    claimableAmount: claimableAmountData, 
+    claimTokens,
+    tokenAddress,
+    vestingTemplate: vestingTemplateData
+  } = useVestolink(vestolinkAddress)
+  
+  // Get token information
+  const tokenData = useToken(tokenAddress?.data as `0x${string}` || '0x0000000000000000000000000000000000000000')
   
   const [vestingData, setVestingData] = useState<VestingData | null>(null)
   const [vestingTemplate, setVestingTemplate] = useState<VestingTemplate | null>(null)
@@ -63,13 +72,12 @@ export default function ClaimPage({ params }: { params: { address: string } }) {
       }
 
       try {
-        // Get token info from smart contract
-        if (vestingSchedule.data) {
-          const data = vestingSchedule.data as any
+        // Get token info from token contract
+        if (tokenData?.name?.data && tokenData?.symbol?.data && tokenAddress?.data) {
           setTokenInfo({
-            name: data.tokenName || 'Unknown Token',
-            symbol: data.tokenSymbol || 'UNK',
-            address: data.tokenAddress || '0x0000000000000000000000000000000000000000',
+            name: tokenData.name.data as string,
+            symbol: tokenData.symbol.data as string,
+            address: tokenAddress.data as string,
           })
         } else {
           // Default fallback
@@ -80,38 +88,66 @@ export default function ClaimPage({ params }: { params: { address: string } }) {
           })
         }
 
-        // Get vesting schedule data from smart contract
-        if (vestingSchedule.data) {
-          const data = vestingSchedule.data as any
-          setVestingData({
-            totalAmount: formatTokenAmount(data.totalAmount?.toString() || '0'),
-            claimedAmount: formatTokenAmount(data.claimedAmount?.toString() || '0'),
-            templateId: data.templateId?.toString() || '1',
-            airdropClaimed: data.airdropClaimed || false,
-            revoked: data.revoked || false,
+        // Get beneficiary vesting schedule data from getVestingSchedule
+        if (vestingSchedule?.data) {
+          const scheduleResult = vestingSchedule.data as any
+          console.log('Raw vesting schedule data:', scheduleResult)
+          
+          // Extract beneficiary data and template from getVestingSchedule result
+          const beneficiaryData = scheduleResult.data || scheduleResult[0]
+          const templateData = scheduleResult.template || scheduleResult[1]
+          
+          if (beneficiaryData) {
+            setVestingData({
+              totalAmount: beneficiaryData.totalAmount?.toString() || '0',
+              claimedAmount: beneficiaryData.claimedAmount?.toString() || '0',
+              templateId: beneficiaryData.templateId?.toString() || '0',
+              airdropClaimed: Boolean(beneficiaryData.airdropClaimed),
+              revoked: Boolean(beneficiaryData.revoked),
+            })
+          } else {
+            // No vesting data found - user is not a beneficiary
+            setVestingData({
+              totalAmount: '0',
+              claimedAmount: '0',
+              templateId: '0',
+              airdropClaimed: false,
+              revoked: false,
+            })
+          }
+
+          // Set vesting template from getVestingSchedule
+          if (templateData) {
+            setVestingTemplate({
+              startTime: Number(templateData.startTime || 0),
+              cliffDuration: Number(templateData.cliffDuration || 0),
+              totalDuration: Number(templateData.totalDuration || 0),
+              releaseInterval: Number(templateData.releaseInterval || 0),
+              earlyClaimPercentage: Number(templateData.earlyClaimPercentage || 0),
+              earlyClaimEnabled: Boolean(templateData.earlyClaimEnabled),
+              isActive: Boolean(templateData.isActive),
+            })
+          }
+        } else if (vestingTemplateData?.data) {
+          // Fallback to separate template data if available
+          const template = vestingTemplateData.data as any
+          setVestingTemplate({
+            startTime: Number(template.startTime || 0),
+            cliffDuration: Number(template.cliffDuration || 0),
+            totalDuration: Number(template.totalDuration || 0),
+            releaseInterval: Number(template.releaseInterval || 0),
+            earlyClaimPercentage: Number(template.earlyClaimPercentage || 0),
+            earlyClaimEnabled: Boolean(template.earlyClaimEnabled),
+            isActive: Boolean(template.isActive),
           })
-        } else {
-          // No vesting data found
+          
+          // No vesting data found - user is not a beneficiary
           setVestingData({
             totalAmount: '0',
             claimedAmount: '0',
-            templateId: '1',
+            templateId: '0',
             airdropClaimed: false,
             revoked: false,
-          })
-        }
-
-        // Set template data
-        if (vestingSchedule.data) {
-          const data = vestingSchedule.data as any
-          setVestingTemplate({
-            startTime: data.startTime,
-            cliffDuration: data.cliffDuration,
-            totalDuration: data.totalDuration,
-            releaseInterval: data.releaseInterval,
-            earlyClaimPercentage: data.earlyClaimPercentage,
-            earlyClaimEnabled: data.earlyClaimEnabled,
-            isActive: data.isActive,
           })
         } else {
           // Fallback template data
@@ -124,23 +160,57 @@ export default function ClaimPage({ params }: { params: { address: string } }) {
             earlyClaimEnabled: false,
             isActive: true,
           })
+          
+          // No vesting data found - user is not a beneficiary
+          setVestingData({
+            totalAmount: '0',
+            claimedAmount: '0',
+            templateId: '0',
+            airdropClaimed: false,
+            revoked: false,
+          })
         }
 
         // Use real claimable amount if available
-        if (claimableAmountData.data) {
-          setClaimableAmount(formatTokenAmount(claimableAmountData.data.toString()))
+        if (claimableAmountData?.data) {
+          const amount = claimableAmountData.data.toString()
+          // Convert from wei to readable format (assuming 18 decimals)
+          const formattedAmount = (Number(amount) / 1e18).toString()
+          setClaimableAmount(formattedAmount)
         } else {
           setClaimableAmount('0')
         }
       } catch (error) {
         console.error("Error loading vesting data:", error)
+        // Set fallback data
+        setVestingData({
+          totalAmount: '0',
+          claimedAmount: '0',
+          templateId: '0',
+          airdropClaimed: false,
+          revoked: false,
+        })
+        setVestingTemplate({
+          startTime: Math.floor(Date.now() / 1000),
+          cliffDuration: 0,
+          totalDuration: 0,
+          releaseInterval: 0,
+          earlyClaimPercentage: 0,
+          earlyClaimEnabled: false,
+          isActive: false,
+        })
+        setTokenInfo({
+          name: 'Unknown Token',
+          symbol: 'UNK',
+          address: '0x0000000000000000000000000000000000000000',
+        })
       } finally {
         setLoading(false)
       }
     }
 
     loadVestingData()
-  }, [account, vestolinkAddress, vestingSchedule, claimableAmountData])
+  }, [account, vestolinkAddress, vestingSchedule?.data, claimableAmountData?.data, tokenData?.name?.data, tokenData?.symbol?.data, tokenAddress?.data, vestingTemplateData?.data])
 
   // Update countdown timer
   useEffect(() => {
@@ -180,6 +250,7 @@ export default function ClaimPage({ params }: { params: { address: string } }) {
       return
     }
 
+    setClaiming(true)
     try {
       await claimTokens.writeContractAsync({
         address: vestolinkAddress,
@@ -188,10 +259,14 @@ export default function ClaimPage({ params }: { params: { address: string } }) {
       })
 
       // Refresh data after successful claim
-      window.location.reload()
+      setTimeout(() => {
+        window.location.reload()
+      }, 2000)
     } catch (error: any) {
       console.error("Claim error:", error)
       alert(`Claim failed: ${error.message}`)
+    } finally {
+      setClaiming(false)
     }
   }
 
@@ -201,18 +276,23 @@ export default function ClaimPage({ params }: { params: { address: string } }) {
       return
     }
 
+    setClaiming(true)
     try {
       await claimTokens.writeContractAsync({
         address: vestolinkAddress,
         abi: VESTOLINK_ABI,
-        functionName: 'claimTokens', // Use regular claim for early claim too
+        functionName: 'claimEarlyClaim', // Use the specific early claim function
       })
 
       // Refresh data after successful claim
-      window.location.reload()
+      setTimeout(() => {
+        window.location.reload()
+      }, 2000)
     } catch (error: any) {
       console.error("Early claim error:", error)
       alert(`Early claim failed: ${error.message}`)
+    } finally {
+      setClaiming(false)
     }
   }
 
@@ -222,9 +302,18 @@ export default function ClaimPage({ params }: { params: { address: string } }) {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const progressPercentage = vestingData
-    ? (Number.parseFloat(vestingData.claimedAmount) / Number.parseFloat(vestingData.totalAmount)) * 100
+  const progressPercentage = vestingData && Number.parseFloat(vestingData.totalAmount) > 0
+    ? ((Number.parseFloat(vestingData.claimedAmount) / 1e18) / (Number.parseFloat(vestingData.totalAmount) / 1e18)) * 100
     : 0
+
+  // Helper function to format token amounts from wei
+  const formatDisplayAmount = (weiAmount: string) => {
+    const amount = Number.parseFloat(weiAmount) / 1e18
+    return amount.toLocaleString(undefined, { 
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 6 
+    })
+  }
 
   if (!account) {
     return (
@@ -335,7 +424,10 @@ export default function ClaimPage({ params }: { params: { address: string } }) {
             >
               <div className="text-center mb-6 sm:mb-8">
                 <div className="text-3xl sm:text-5xl font-bold text-primary-500 mb-2">
-                  {Number.parseFloat(claimableAmount).toLocaleString()}
+                  {Number.parseFloat(claimableAmount).toLocaleString(undefined, { 
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 6 
+                  })}
                 </div>
                 <div className="text-lg sm:text-xl text-gray-300 mb-4">{tokenInfo.symbol} Available to Claim</div>
               </div>
@@ -441,10 +533,10 @@ export default function ClaimPage({ params }: { params: { address: string } }) {
                   />
                 </div>
                 <div className="flex justify-between text-xs text-gray-400">
-                  <span>Start: {new Date(vestingTemplate.startTime * 1000).toLocaleDateString()}</span>
+                  <span>Start: {new Date(Number(vestingTemplate.startTime) * 1000).toLocaleDateString()}</span>
                   <span>
                     End:{" "}
-                    {new Date((vestingTemplate.startTime + vestingTemplate.totalDuration) * 1000).toLocaleDateString()}
+                    {new Date((Number(vestingTemplate.startTime) + Number(vestingTemplate.totalDuration)) * 1000).toLocaleDateString()}
                   </span>
                 </div>
               </div>
@@ -465,7 +557,7 @@ export default function ClaimPage({ params }: { params: { address: string } }) {
                   <div>
                     <div className="text-sm text-gray-400">Total Allocated</div>
                     <div className="text-lg sm:text-xl font-bold text-white">
-                      {Number.parseFloat(vestingData.totalAmount).toLocaleString()}
+                      {formatDisplayAmount(vestingData.totalAmount)}
                     </div>
                   </div>
                 </div>
@@ -484,7 +576,7 @@ export default function ClaimPage({ params }: { params: { address: string } }) {
                   <div>
                     <div className="text-sm text-gray-400">Already Claimed</div>
                     <div className="text-lg sm:text-xl font-bold text-white">
-                      {Number.parseFloat(vestingData.claimedAmount).toLocaleString()}
+                      {formatDisplayAmount(vestingData.claimedAmount)}
                     </div>
                   </div>
                 </div>
@@ -503,7 +595,10 @@ export default function ClaimPage({ params }: { params: { address: string } }) {
                   <div>
                     <div className="text-sm text-gray-400">Available Now</div>
                     <div className="text-lg sm:text-xl font-bold text-white">
-                      {Number.parseFloat(claimableAmount).toLocaleString()}
+                      {Number.parseFloat(claimableAmount).toLocaleString(undefined, { 
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 6 
+                      })}
                     </div>
                   </div>
                 </div>
@@ -585,16 +680,16 @@ export default function ClaimPage({ params }: { params: { address: string } }) {
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-400">Cliff Period:</span>
-                  <span className="text-white">{Math.floor(vestingTemplate.cliffDuration / (24 * 60 * 60))} days</span>
+                  <span className="text-white">{Math.floor(Number(vestingTemplate.cliffDuration) / (24 * 60 * 60))} days</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Total Duration:</span>
-                  <span className="text-white">{Math.floor(vestingTemplate.totalDuration / (24 * 60 * 60))} days</span>
+                  <span className="text-white">{Math.floor(Number(vestingTemplate.totalDuration) / (24 * 60 * 60))} days</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Release Interval:</span>
                   <span className="text-white">
-                    {Math.floor(vestingTemplate.releaseInterval / (24 * 60 * 60))} days
+                    {Math.floor(Number(vestingTemplate.releaseInterval) / (24 * 60 * 60))} days
                   </span>
                 </div>
                 {vestingTemplate.earlyClaimEnabled && (

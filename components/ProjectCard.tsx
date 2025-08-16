@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { ArrowUpRight } from "lucide-react"
 import { useVestolink, useToken } from '@/lib/hooks/useContracts'
@@ -13,49 +13,25 @@ interface ProjectCardProps {
 }
 
 export default function ProjectCard({ address, index, isRecent = false }: ProjectCardProps) {
-  const [projectData, setProjectData] = useState({
-    tokenName: 'Loading...',
-    tokenSymbol: 'TKN',
-    tokenAddress: '0x0000000000000000000000000000000000000000',
-    beneficiaryCount: 0,
-    status: 'active' as const,
-  })
-
   // Get data from vestolink contract
   const { tokenAddress, beneficiaryCount } = useVestolink(address as `0x${string}`)
   
   // Get token data once we have the token address
   const tokenData = useToken(tokenAddress?.data as `0x${string}` || '0x0000000000000000000000000000000000000000')
 
-  useEffect(() => {
-    const loadProjectData = () => {
-      try {
-        // Update project data with real contract information
-        const tokenName = tokenData?.name?.data as string
-        const tokenSymbol = tokenData?.symbol?.data as string
-        
-        setProjectData({
-          tokenName: tokenName || `Token Contract ${shortenAddress(address)}`,
-          tokenSymbol: tokenSymbol || 'TKN',
-          tokenAddress: tokenAddress?.data as string || '0x0000000000000000000000000000000000000000',
-          beneficiaryCount: Number(beneficiaryCount?.data || 0),
-          status: 'active',
-        })
-      } catch (error) {
-        console.error('Error loading project data:', error)
-        // Fallback to basic info with more descriptive naming
-        setProjectData({
-          tokenName: `Vesting Contract ${shortenAddress(address)}`,
-          tokenSymbol: 'TKN',
-          tokenAddress: '0x0000000000000000000000000000000000000000',
-          beneficiaryCount: 0,
-          status: 'active',
-        })
-      }
+  // Memoize project data to prevent unnecessary re-renders
+  const projectData = useMemo(() => {
+    const tokenName = tokenData?.name?.data as string
+    const tokenSymbol = tokenData?.symbol?.data as string
+    
+    return {
+      tokenName: tokenName || `Vesting Contract ${shortenAddress(address)}`,
+      tokenSymbol: tokenSymbol || 'TKN',
+      tokenAddress: tokenAddress?.data as string || '0x0000000000000000000000000000000000000000',
+      beneficiaryCount: Number(beneficiaryCount?.data || 0),
+      status: 'active' as const,
     }
-
-    loadProjectData()
-  }, [tokenAddress, beneficiaryCount, tokenData, address])
+  }, [tokenData?.name?.data, tokenData?.symbol?.data, tokenAddress?.data, beneficiaryCount?.data, address])
 
   return (
     <div className={`p-4 bg-slate-900/50 rounded-xl border transition-all duration-200 ${

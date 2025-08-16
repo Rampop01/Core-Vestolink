@@ -19,13 +19,13 @@ export const core: Chain = {
   },
   rpcUrls: {
     default: {
-      http: ['https://rpc.test.btcs.network'],
+      http: ['https://rpc.test2.btcs.network'],
     },
   },
   blockExplorers: {
     default: {
       name: 'Core Testnet Scan',
-      url: 'https://scan.test.btcs.network',
+      url: 'https://scan.test2.btcs.network',
     },
   },
   testnet: true,
@@ -39,7 +39,7 @@ const config = getDefaultConfig({
   projectId: '96aab5ed69f1740a6cb82d7c7a4203e5', // Get this from WalletConnect Cloud
   chains,
   transports: {
-    [core.id]: http('https://rpc.test.btcs.network'),
+    [core.id]: http('https://rpc.test2.btcs.network'),
   },
   ssr: true,
 })

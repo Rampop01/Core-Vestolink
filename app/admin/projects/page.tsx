@@ -3,9 +3,9 @@
 import { useState, useMemo } from "react"
 import { motion } from "framer-motion"
 import Link from "next/link"
-import { useAccount } from 'wagmi'
+import { useAccount, useChainId } from 'wagmi'
 import { useVestolinkFactory, useVestolink, useToken } from '@/lib/hooks/useContracts'
-import { formatTokenAmount, shortenAddress } from '@/lib/utils'
+import { shortenAddress } from '@/lib/web3'
 import {
   Plus,
   Search,
@@ -19,27 +19,39 @@ import {
   Eye,
 } from "lucide-react"
 
+// Network configuration mapping
+const NETWORK_NAMES: Record<number, string> = {
+  1: 'Ethereum Mainnet',
+  11155111: 'Sepolia Testnet',
+  1337: 'Hardhat Local',
+  31337: 'Localhost',
+  1114: 'Core Blockchain Testnet2',
+}
+
 // Individual project component that uses hooks
 function ProjectItem({ vestolinkAddress, index, isRecent = false }: { vestolinkAddress: `0x${string}`, index: number, isRecent?: boolean }) {
+  const chainId = useChainId()
   const { beneficiaryCount, tokenAddress } = useVestolink(vestolinkAddress)
   const tokenData = useToken(tokenAddress?.data as `0x${string}` || '0x0000000000000000000000000000000000000000')
+
   
-  const project = {
+  
+  const project = useMemo(() => ({
     id: index + 1,
     address: vestolinkAddress,
     name: tokenData?.name?.data as string || `Vesting Contract ${shortenAddress(vestolinkAddress)}`,
     symbol: tokenData?.symbol?.data as string || 'TKN',
     status: 'active' as const,
     beneficiaries: beneficiaryCount?.data ? Number(beneficiaryCount.data) : 0,
-    totalTokens: '0',
-    claimed: '0',
-    progress: 0,
+    totalTokens: '0', // TODO: Get from contract when available
+    claimed: '0', // TODO: Get from contract when available
+    progress: 0, // TODO: Calculate from vesting data
     createdAt: new Date().toISOString().split('T')[0],
     claimPage: `/claim/${vestolinkAddress}`,
-    nextUnlock: 'TBD',
-    network: 'Morph Holesky',
+    nextUnlock: 'TBD', // TODO: Calculate from vesting schedule
+    network: NETWORK_NAMES[chainId] || `Unknown Network (${chainId})`,
     isRecent,
-  }
+  }), [vestolinkAddress, index, tokenData?.name?.data, tokenData?.symbol?.data, beneficiaryCount?.data, chainId, isRecent])
 
   const StatusIcon = statusIcons[project.status as keyof typeof statusIcons]
   
@@ -152,6 +164,90 @@ function ProjectItem({ vestolinkAddress, index, isRecent = false }: { vestolinkA
   )
 }
 
+// List view component for table rows
+function ProjectListItem({ vestolinkAddress, index, networkName }: { vestolinkAddress: `0x${string}`, index: number, networkName: string }) {
+  const { beneficiaryCount, tokenAddress } = useVestolink(vestolinkAddress)
+  const tokenData = useToken(tokenAddress?.data as `0x${string}` || '0x0000000000000000000000000000000000000000')
+  
+  const project = useMemo(() => ({
+    id: index + 1,
+    address: vestolinkAddress,
+    name: tokenData?.name?.data as string || `Vesting Contract ${shortenAddress(vestolinkAddress)}`,
+    symbol: tokenData?.symbol?.data as string || 'TKN',
+    status: 'active' as const,
+    beneficiaries: beneficiaryCount?.data ? Number(beneficiaryCount.data) : 0,
+    progress: 0, // TODO: Calculate from vesting data
+    network: networkName,
+    claimPage: `/claim/${vestolinkAddress}`,
+  }), [vestolinkAddress, index, tokenData?.name?.data, tokenData?.symbol?.data, beneficiaryCount?.data, networkName])
+
+  const StatusIcon = statusIcons[project.status as keyof typeof statusIcons]
+  
+  return (
+    <motion.tr
+      key={project.address}
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.1 }}
+      className="hover:bg-slate-700/30 transition-colors"
+    >
+      <td className="px-6 py-4 whitespace-nowrap">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-300 rounded-lg flex items-center justify-center text-slate-900 font-bold text-sm">
+            {project.symbol.charAt(0)}
+          </div>
+          <div>
+            <div className="text-sm font-medium text-white">{project.name}</div>
+            <div className="text-sm text-gray-400">{shortenAddress(project.address)}</div>
+          </div>
+        </div>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap">
+        <div
+          className={`inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium border ${statusColors[project.status as keyof typeof statusColors]}`}
+        >
+          <StatusIcon className="w-3 h-3" />
+          <span className="capitalize">{project.status}</span>
+        </div>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap">
+        <div className="flex items-center space-x-3">
+          <div className="flex-1 bg-slate-700 rounded-full h-2 w-20">
+            <div
+              className="bg-gradient-to-r from-primary-500 to-primary-300 h-2 rounded-full"
+              style={{ width: `${project.progress}%` }}
+            />
+          </div>
+          <span className="text-sm text-white">{project.progress}%</span>
+        </div>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{project.beneficiaries}</td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{project.network}</td>
+      <td className="px-6 py-4 whitespace-nowrap">
+        <div className="flex items-center space-x-2">
+          <Link
+            href={`/admin/projects/${project.address}`}
+            className="p-2 text-gray-400 hover:text-primary-500 rounded-lg hover:bg-slate-700 transition-colors"
+            title="View Details"
+          >
+            <Eye className="w-4 h-4" />
+          </Link>
+          <Link
+            href={project.claimPage}
+            className="p-2 text-gray-400 hover:text-primary-500 rounded-lg hover:bg-slate-700 transition-colors"
+            title="View Claim Page"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </Link>
+          <button className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-slate-700 transition-colors">
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+        </div>
+      </td>
+    </motion.tr>
+  )
+}
+
 const statusColors = {
   active: "bg-green-500/20 text-green-400 border-green-500/30",
   pending: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
@@ -168,38 +264,28 @@ const statusIcons = {
 
 export default function ProjectsPage() {
   const { address: account } = useAccount()
+  const chainId = useChainId()
   const { userVestolinks } = useVestolinkFactory()
   const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
 
-  // Create dynamic projects from user's vestolinks
-  const projects = useMemo(() => {
-    if (!userVestolinks.data) return []
-    return userVestolinks.data.map((address, index) => ({
-      id: index + 1,
-      address: address,
-      name: `Project ${address.slice(0, 6)}`,
-      symbol: 'TKN',
-      status: 'active' as const,
-      beneficiaries: 0, // Will be populated by individual hooks
-      totalTokens: '0',
-      claimed: '0',
-      progress: 0,
-      createdAt: new Date().toISOString().split('T')[0],
-      claimPage: `/claim/${address}`,
-      nextUnlock: 'TBD',
-      network: 'Morph Holesky',
-    }))
-  }, [userVestolinks.data])
+  // Get network name
+  const networkName = NETWORK_NAMES[chainId] || `Unknown Network (${chainId})`
 
-  const filteredProjects = projects.filter((project) => {
-    const matchesSearch =
-      project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.symbol.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "all" || project.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
+  // Filter projects based on search
+  const filteredProjects = useMemo(() => {
+    if (!userVestolinks.data) return []
+    
+    return userVestolinks.data.filter((address) => {
+      if (!searchTerm) return true
+      
+      // Search by address or shortened address
+      const addressMatch = address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          shortenAddress(address).toLowerCase().includes(searchTerm.toLowerCase())
+      
+      return addressMatch
+    })
+  }, [userVestolinks.data, searchTerm])
 
   // Show loading state
   if (userVestolinks.isLoading) {
@@ -230,6 +316,21 @@ export default function ProjectsPage() {
     )
   }
 
+  // Show connect wallet message if not connected
+  if (!account) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <AlertCircle className="w-12 h-12 text-yellow-400 mx-auto mb-4" />
+            <p className="text-yellow-400 mb-2">Wallet not connected</p>
+            <p className="text-gray-400">Please connect your wallet to view your projects.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -240,7 +341,7 @@ export default function ProjectsPage() {
       >
         <div>
           <h1 className="text-3xl font-bold text-white mb-2">My Projects</h1>
-          <p className="text-gray-400">Manage your token vesting projects</p>
+          <p className="text-gray-400">Manage your token vesting projects on {networkName}</p>
         </div>
         <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
           <Link
@@ -274,17 +375,6 @@ export default function ProjectsPage() {
             </div>
           </div>
           <div className="flex items-center space-x-4">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 bg-slate-700 border border-gray-600 rounded-lg text-white focus:border-primary-500 focus:outline-none text-sm"
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="pending">Pending</option>
-              <option value="completed">Completed</option>
-              <option value="paused">Paused</option>
-            </select>
             <div className="flex border border-gray-600 rounded-lg overflow-hidden">
               <button
                 onClick={() => setViewMode("grid")}
@@ -343,76 +433,14 @@ export default function ProjectsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700">
-                  {filteredProjects.map((project, index) => {
-                    const StatusIcon = statusIcons[project.status as keyof typeof statusIcons]
-                    return (
-                      <motion.div
-                        key={project.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.1 }}
-                        className="hover:bg-slate-700/30 transition-colors"
-                      >
-                        <tr>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center space-x-3">
-                              <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-300 rounded-lg flex items-center justify-center text-slate-900 font-bold text-sm">
-                                {project.symbol.charAt(0)}
-                              </div>
-                              <div>
-                                <div className="text-sm font-medium text-white">{project.name}</div>
-                                <div className="text-sm text-gray-400">{project.symbol}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div
-                              className={`inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium border ${statusColors[project.status as keyof typeof statusColors]}`}
-                            >
-                              <StatusIcon className="w-3 h-3" />
-                              <span className="capitalize">{project.status}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center space-x-3">
-                              <div className="flex-1 bg-slate-700 rounded-full h-2 w-20">
-                                <div
-                                  className="bg-gradient-to-r from-primary-500 to-primary-300 h-2 rounded-full"
-                                  style={{ width: `${project.progress}%` }}
-                                />
-                              </div>
-                              <span className="text-sm text-white">{project.progress}%</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{project.beneficiaries}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{project.network}</td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center space-x-2">
-                              <Link
-                                href={`/admin/projects/${project.id}`}
-                                className="p-2 text-gray-400 hover:text-primary-500 rounded-lg hover:bg-slate-700 transition-colors"
-                                title="View Details"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </Link>
-                              <a
-                                href={project.claimPage}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-2 text-gray-400 hover:text-primary-500 rounded-lg hover:bg-slate-700 transition-colors"
-                                title="View Claim Page"
-                              >
-                                <ExternalLink className="w-4 h-4" />
-                              </a>
-                              <button className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-slate-700 transition-colors">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      </motion.div>
-                    )
-                  })}
+                  {filteredProjects.map((address, index) => (
+                    <ProjectListItem 
+                      key={address} 
+                      vestolinkAddress={address} 
+                      index={index}
+                      networkName={networkName}
+                    />
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -424,11 +452,11 @@ export default function ProjectsPage() {
             <Coins className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-white mb-2">No projects found</h3>
             <p className="text-gray-400 mb-6">
-              {searchTerm || statusFilter !== "all"
-                ? "Try adjusting your search or filter criteria"
+              {searchTerm
+                ? "Try adjusting your search criteria"
                 : "Get started by creating your first vesting project"}
             </p>
-            {!searchTerm && statusFilter === "all" && (
+            {!searchTerm && (
               <Link
                 href="/admin/deploy"
                 className="inline-flex items-center space-x-2 px-6 py-3 bg-primary-500 text-slate-900 rounded-xl font-semibold hover:bg-primary-400 transition-colors shadow-sm"

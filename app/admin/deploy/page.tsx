@@ -8,19 +8,16 @@ import {
   Coins,
   Plus,
   Upload,
-  Calendar,
   Clock,
-  Users,
   CheckCircle,
   AlertCircle,
   Wallet,
   ExternalLink,
   Loader2,
-  Globe,
   Copy,
 } from "lucide-react"
 import Link from "next/link"
-import { useAccount, useConnect, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi'
+import { useAccount, useConnect, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { parseTokenAmount, getExplorerUrl, shortenAddress, VESTOLINK_ABI, FACTORY_ABI, CONTRACTS } from "@/lib/web3"
 
 const steps = [
@@ -50,13 +47,6 @@ export default function DeployProject() {
   const { writeContract: deployWithTokenWrite, data: deployTokenTxHash, isPending: isDeployTokenPending, error: deployTokenError } = useWriteContract()
   const { writeContract: deployWithExistingTokenWrite, data: deployExistingTxHash, isPending: isDeployExistingPending, error: deployExistingError } = useWriteContract()
   const { writeContract: writeVestingSchedule, data: vestingTxHash, isPending: isVestingPending, error: vestingError } = useWriteContract()
-  
-  // Check if factory contract exists
-  const { data: factoryOwner, error: factoryError } = useReadContract({
-    address: CONTRACTS.FACTORY,
-    abi: FACTORY_ABI,
-    functionName: 'owner',
-  })
   
   // Wait for transaction receipts
   const { data: deployTokenReceipt, isSuccess: isDeployTokenSuccess } = useWaitForTransactionReceipt({
@@ -103,27 +93,9 @@ export default function DeployProject() {
     beneficiaries: [] as Array<{ address: string; amount: string }>,
   })
 
-  // Monitor transaction hash
-  useEffect(() => {
-    if (deployTokenTxHash && deploymentStatus === "deploying") {
-      console.log('Deploy token transaction hash:', deployTokenTxHash)
-      console.log('Waiting for transaction confirmation...')
-      console.log('Explorer link:', `https://scan.test.btcs.network/tx/${deployTokenTxHash}`)
-    }
-  }, [deployTokenTxHash, deploymentStatus])
-
-  useEffect(() => {
-    if (deployExistingTxHash && deploymentStatus === "deploying") {
-      console.log('Deploy existing token transaction hash:', deployExistingTxHash)
-      console.log('Waiting for transaction confirmation...')
-      console.log('Explorer link:', `https://scan.test.btcs.network/tx/${deployExistingTxHash}`)
-    }
-  }, [deployExistingTxHash, deploymentStatus])
-
   // Handle successful deployment when transaction receipts are available
   useEffect(() => {
     if (isDeployTokenSuccess && deployTokenReceipt && deploymentStatus === "deploying") {
-      console.log('Deploy token transaction confirmed!')
       processSuccessfulDeployment(deployTokenReceipt, deployTokenTxHash!, "new")
     }
   }, [isDeployTokenSuccess, deployTokenReceipt, deploymentStatus, deployTokenTxHash])
@@ -138,7 +110,6 @@ export default function DeployProject() {
   useEffect(() => {
     if (deployTokenError && deploymentStatus === "deploying") {
       console.error("Deploy token error:", deployTokenError)
-      alert(`Token deployment failed: ${deployTokenError.message}`)
       setDeploymentStatus("error")
       setIsDeploying(false)
     }
@@ -147,7 +118,6 @@ export default function DeployProject() {
   useEffect(() => {
     if (deployExistingError && deploymentStatus === "deploying") {
       console.error("Deploy existing token error:", deployExistingError)
-      alert(`Existing token deployment failed: ${deployExistingError.message}`)
       setDeploymentStatus("error")
       setIsDeploying(false)
     }
@@ -160,8 +130,6 @@ export default function DeployProject() {
 
       // Parse the transaction receipt for actual contract addresses
       if (receipt.logs && receipt.logs.length > 0) {
-        console.log('Deploy receipt logs:', receipt.logs)
-        
         // Look for VestolinkDeployed event in logs
         const vestolinkDeployedEvent = receipt.logs.find((log: any) => 
           log.topics && log.topics.length >= 3 && 
@@ -169,12 +137,6 @@ export default function DeployProject() {
         )
         
         if (vestolinkDeployedEvent) {
-          // Extract addresses from event topics
-          // Topic 0: event signature (keccak256 hash)
-          // Topic 1: deployer address (indexed)
-          // Topic 2: vestolink address (indexed)  
-          // Topic 3: token address (indexed)
-          
           if (vestolinkDeployedEvent.topics[2]) {
             vestolinkAddress = `0x${vestolinkDeployedEvent.topics[2].slice(26)}`
           }
@@ -184,8 +146,6 @@ export default function DeployProject() {
           } else if (type === "existing") {
             tokenAddress = formData.existingTokenAddress
           }
-          
-          console.log('Extracted real addresses:', { vestolinkAddress, tokenAddress })
         } else {
           throw new Error('VestolinkDeployed event not found in transaction receipt')
         }
@@ -209,11 +169,12 @@ export default function DeployProject() {
       )
 
       // Step 3: Set up vesting schedule if beneficiaries exist
-      if (formData.beneficiaries.length > 0) {
-        const beneficiaryAddresses = formData.beneficiaries.map((b) => b.address as `0x${string}`)
-        const amounts = formData.beneficiaries.map((b) => parseTokenAmount(b.amount))
+      const validBeneficiaries = formData.beneficiaries.filter(b => b.address && b.amount && b.amount.trim() !== '')
+      if (validBeneficiaries.length > 0) {
+        const beneficiaryAddresses = validBeneficiaries.map((b) => b.address as `0x${string}`)
+        const amounts = validBeneficiaries.map((b) => parseTokenAmount(b.amount))
         const startTime = Math.floor(new Date(formData.startTime).getTime() / 1000)
-        const cliffDuration = Number.parseInt(formData.cliffDuration) * 24 * 60 * 60 // Convert days to seconds
+        const cliffDuration = Number.parseInt(formData.cliffDuration) * 24 * 60 * 60
         const totalDuration = Number.parseInt(formData.totalDuration) * 24 * 60 * 60
         const releaseInterval = Number.parseInt(formData.releaseInterval) * 24 * 60 * 60
         const earlyClaimPercentage = Number.parseInt(formData.earlyClaimPercent) || 0
@@ -261,7 +222,6 @@ export default function DeployProject() {
 
     } catch (error: any) {
       console.error("Deployment processing error:", error)
-      alert(`Deployment failed: ${error.message}`)
       setDeploymentStatus("error")
     } finally {
       setIsDeploying(false)
@@ -292,6 +252,11 @@ export default function DeployProject() {
   }
 
   const updateBeneficiary = (index: number, field: string, value: string) => {
+    // For amount field, ensure it's a valid number
+    if (field === "amount" && value !== "" && (isNaN(Number(value)) || Number(value) < 0)) {
+      return // Don't update if invalid number
+    }
+    
     setFormData((prev) => ({
       ...prev,
       beneficiaries: prev.beneficiaries.map((b, i) => (i === index ? { ...b, [field]: value } : b)),
@@ -307,14 +272,19 @@ export default function DeployProject() {
 
   const deployContract = async () => {
     if (!account) {
-      alert("Please connect your wallet first")
       return
     }
 
     if (isDeployTokenPending || isDeployExistingPending) {
-      alert("Please wait for the current transaction to complete")
       return
     }
+
+    // Clean up empty beneficiaries before deployment
+    const cleanedBeneficiaries = formData.beneficiaries.filter(b => 
+      b.address && b.address.trim() !== '' && b.amount && b.amount.trim() !== ''
+    )
+    
+    setFormData(prev => ({ ...prev, beneficiaries: cleanedBeneficiaries }))
 
     setIsDeploying(true)
     setDeploymentStatus("deploying")
@@ -322,14 +292,6 @@ export default function DeployProject() {
     try {
       // Step 1: Validate parameters
       setDeploymentSteps((prev) => prev.map((step, i) => (i === 0 ? { ...step, status: "active" } : step)))
-
-      // Check if factory contract exists
-      console.log('Factory contract owner:', factoryOwner)
-      console.log('Factory contract error:', factoryError)
-      
-      if (factoryError) {
-        throw new Error(`Factory contract not found at ${CONTRACTS.FACTORY}. Please verify the contract address.`)
-      }
 
       // Validate form data
       if (tokenType === "new") {
@@ -342,6 +304,16 @@ export default function DeployProject() {
         }
       }
 
+      // Validate beneficiaries if any are added
+      if (cleanedBeneficiaries.length > 0) {
+        const invalidBeneficiaries = cleanedBeneficiaries.some(b => 
+          !b.address || !b.amount || b.amount.trim() === '' || isNaN(Number(b.amount)) || Number(b.amount) <= 0
+        )
+        if (invalidBeneficiaries) {
+          throw new Error("Please provide valid addresses and amounts for all beneficiaries")
+        }
+      }
+
       setDeploymentSteps((prev) =>
         prev.map((step, i) =>
           i === 0 ? { ...step, status: "completed" } : i === 1 ? { ...step, status: "active" } : step,
@@ -350,49 +322,27 @@ export default function DeployProject() {
 
       // Step 2: Deploy contracts
       if (tokenType === "new") {
-        console.log('Deploying with new token:', formData)
-        console.log('Factory contract address:', CONTRACTS.FACTORY)
-        console.log('Parsed total supply:', parseTokenAmount(formData.totalSupply))
-        
-        try {
-          await deployWithTokenWrite({
-            address: CONTRACTS.FACTORY,
-            abi: FACTORY_ABI,
-            functionName: 'deployVestolinkWithToken',
-            args: [
-              formData.tokenName,
-              formData.tokenSymbol,
-              parseTokenAmount(formData.totalSupply)
-            ],
-          })
-          console.log('deployVestolinkWithToken transaction submitted')
-          console.log('Transaction hash will be available soon...')
-        } catch (deployError: any) {
-          console.error('Deploy with token error:', deployError)
-          throw new Error(`Token deployment failed: ${deployError.message || deployError}`)
-        }
-        
+        await deployWithTokenWrite({
+          address: CONTRACTS.FACTORY,
+          abi: FACTORY_ABI,
+          functionName: 'deployVestolinkWithToken',
+          args: [
+            formData.tokenName,
+            formData.tokenSymbol,
+            parseTokenAmount(formData.totalSupply)
+          ],
+        })
       } else {
-        console.log('Deploying with existing token:', formData.existingTokenAddress)
-        console.log('Factory contract address:', CONTRACTS.FACTORY)
-        
-        try {
-          await deployWithExistingTokenWrite({
-            address: CONTRACTS.FACTORY,
-            abi: FACTORY_ABI,
-            functionName: 'deployVestolinkWithExistingToken',
-            args: [formData.existingTokenAddress as `0x${string}`],
-          })
-          console.log('deployVestolinkWithExistingToken transaction submitted')
-        } catch (deployError: any) {
-          console.error('Deploy with existing token error:', deployError)
-          throw new Error(`Existing token deployment failed: ${deployError.message || deployError}`)
-        }
+        await deployWithExistingTokenWrite({
+          address: CONTRACTS.FACTORY,
+          abi: FACTORY_ABI,
+          functionName: 'deployVestolinkWithExistingToken',
+          args: [formData.existingTokenAddress as `0x${string}`],
+        })
       }
 
     } catch (error: any) {
       console.error("Deployment error:", error)
-      alert(`Deployment failed: ${error.message}`)
       setDeploymentStatus("error")
       setIsDeploying(false)
     }
@@ -515,6 +465,43 @@ export default function DeployProject() {
               className="px-6 py-3 bg-primary-500 text-slate-900 rounded-xl font-semibold hover:bg-primary-400 transition-colors"
             >
               Manage Project
+            </Link>
+          </div>
+        </motion.div>
+      </div>
+    )
+  }
+
+  if (deploymentStatus === "error") {
+    return (
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center"
+        >
+          <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
+            <AlertCircle className="w-8 h-8 text-white" />
+          </div>
+          <h2 className="text-3xl font-bold text-white mb-4">Deployment Failed</h2>
+          <p className="text-gray-400 mb-8">There was an error deploying your vesting contract. Please try again.</p>
+          
+          <div className="flex gap-4 justify-center">
+            <button
+              onClick={() => {
+                setDeploymentStatus("idle")
+                setIsDeploying(false)
+                setCurrentStep(1)
+              }}
+              className="px-6 py-3 bg-primary-500 text-slate-900 rounded-xl font-semibold hover:bg-primary-400 transition-colors"
+            >
+              Try Again
+            </button>
+            <Link
+              href="/admin"
+              className="px-6 py-3 bg-slate-700 text-white rounded-xl font-semibold hover:bg-slate-600 transition-colors"
+            >
+              Back to Dashboard
             </Link>
           </div>
         </motion.div>
@@ -807,6 +794,8 @@ export default function DeployProject() {
                         value={beneficiary.amount}
                         onChange={(e) => updateBeneficiary(index, "amount", e.target.value)}
                         placeholder="Amount"
+                        min="0"
+                        step="any"
                         className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500"
                       />
                     </div>

@@ -112,6 +112,8 @@ export default function BeneficiariesPage() {
   const beneficiaries = useMemo(() => {
     const data: any[] = []
     vestolinkAddresses.forEach((vestolinkAddress, index) => {
+      // const beneficiaryData = BeneficiaryData({ vestolinkAddress, index })
+      // console.log('Beneficiary data:', beneficiaryData)
       data.push({
         id: index + 1,
         address: vestolinkAddress,
